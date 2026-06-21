@@ -58,6 +58,17 @@ class MinecraftActivity : MainActivity() {
                 Log.w(TAG, "Failed to load preloader: ${e.message}")
             }
 
+            // Minecraft 26.30+ links libminecraftpe.so against libfmod.so (and
+            // friends) directly, instead of the engine dlopen'ing them lazily
+            // at its own pace like older builds did. They must already be
+            // resident in the process before we dlopen libminecraftpe.so or
+            // it fails with UnsatisfiedLinkError ("needed by libminecraftpe.so").
+            for (dep in listOf("c++_shared", "fmod", "MediaDecoders_Android", "HttpClient.Android")) {
+                if (!gameManager.loadLibrary(dep)) {
+                    Log.w(TAG, "Dependency lib$dep.so failed to load, continuing anyway")
+                }
+            }
+
             if (!gameManager.loadLibrary("minecraftpe")) {
                 throw RuntimeException("Failed to load libminecraftpe.so")
             }
