@@ -77,14 +77,15 @@ class GamePackageManager private constructor(private val context: Context, priva
     }
 
     private fun resolveNativeLibDir(): String {
-        val appInfo = packageContext.applicationInfo
-        return if (appInfo.splitPublicSourceDirs?.isNotEmpty() == true) {
-            val cacheLibDir = File(context.cacheDir, "lib/${getDeviceAbi()}")
-            cacheLibDir.mkdirs()
-            cacheLibDir.absolutePath
-        } else {
-            appInfo.nativeLibraryDir
-        }
+        // Always use a directory we control. Minecraft's own nativeLibraryDir
+        // lives in another app's private /data/app folder, which we can read
+        // from (via createPackageContext) but never write to. Newer builds
+        // (26.30+) also don't necessarily extract every native lib to disk
+        // (extractNativeLibs=false), so the safest path is to always
+        // self-extract into our own cache dir from the APK zip directly.
+        val cacheLibDir = File(context.cacheDir, "lib/${getDeviceAbi()}")
+        cacheLibDir.mkdirs()
+        return cacheLibDir.absolutePath
     }
 
     private fun getDeviceAbi(): String {
@@ -101,8 +102,9 @@ class GamePackageManager private constructor(private val context: Context, priva
             outputDir.mkdirs()
         }
 
+        val apkPaths = mutableListOf<String>()
+
         if (version != null && !version.isInstalled) {
-            val apkPaths = mutableListOf<String>()
             val baseApk = File(applicationInfo.sourceDir)
             if (baseApk.exists()) {
                 apkPaths.add(applicationInfo.sourceDir)
@@ -116,23 +118,29 @@ class GamePackageManager private constructor(private val context: Context, priva
                     Log.w(TAG, "Split APK not found: $it")
                 }
             }
-            apkPaths.forEach { extractFromApk(it, outputDir, getDeviceAbi()) }
-            if (requiredLibs.any { !File(outputDir, it).exists() }) {
-                Log.w(TAG, "Primary ABI ${getDeviceAbi()} libraries missing, trying fallback ABIs")
-                val fallbackAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
-                fallbackAbis.filter { it != getDeviceAbi() }.forEach { abi ->
-                    apkPaths.forEach { extractFromApk(it, outputDir, abi) }
-                }
-            }
         } else {
             val appInfo = packageContext.applicationInfo
-            if (File(appInfo.nativeLibraryDir).exists()) {
+            // Best-effort: if the OS already extracted libs to Minecraft's own
+            // nativeLibraryDir (older builds, extractNativeLibs=true), grab a
+            // copy. This is skipped if it would just be a self-copy.
+            if (appInfo.nativeLibraryDir != outputDir.absolutePath && File(appInfo.nativeLibraryDir).exists()) {
                 copyFromNativeDir(appInfo.nativeLibraryDir, outputDir)
             }
-            val apkPaths = mutableListOf<String>()
             appInfo.sourceDir?.let { apkPaths.add(it) }
             appInfo.splitPublicSourceDirs?.let { apkPaths.addAll(it) }
-            apkPaths.forEach { extractFromApk(it, outputDir, getDeviceAbi()) }
+        }
+
+        // Always read directly from the APK zip too — this works regardless
+        // of whether the OS itself extracted the lib to disk, and is the only
+        // path that succeeds when nativeLibraryDir belongs to another app.
+        apkPaths.forEach { extractFromApk(it, outputDir, getDeviceAbi()) }
+
+        if (requiredLibs.any { !File(outputDir, it).exists() }) {
+            Log.w(TAG, "Primary ABI ${getDeviceAbi()} libraries missing, trying fallback ABIs")
+            val fallbackAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            fallbackAbis.filter { it != getDeviceAbi() }.forEach { abi ->
+                apkPaths.forEach { extractFromApk(it, outputDir, abi) }
+            }
         }
         verifyLibraries(outputDir)
     }
