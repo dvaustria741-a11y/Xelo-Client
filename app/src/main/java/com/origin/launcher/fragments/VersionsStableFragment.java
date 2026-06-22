@@ -66,7 +66,7 @@ public class VersionsStableFragment extends BaseThemedFragment {
                     container.removeAllViews();
                     for (int i = 0; i < stable.size(); i++) {
                         VersionsRepository.VersionEntry e = stable.get(i);
-                        addVersionCard(container, e.title, "", e.url);
+                        addVersionCard(container, e.title, "", e.url, e.browserUrl);
                     }
                     Log.d("VersionsStable", "Added " + stable.size() + " version cards to UI");
                 });
@@ -85,7 +85,7 @@ public class VersionsStableFragment extends BaseThemedFragment {
         DiscordRPCHelper.getInstance().updateIdlePresence();
     }
 
-    private void addVersionCard(LinearLayout container, String title, String subtitle, String url) {
+    private void addVersionCard(LinearLayout container, String title, String subtitle, String url, String browserUrl) {
         // Create card
         MaterialCardView card = new MaterialCardView(requireContext());
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
@@ -160,17 +160,24 @@ public class VersionsStableFragment extends BaseThemedFragment {
         downloadBtn.setCornerRadius((int) (28 * getResources().getDisplayMetrics().density));
         // Apply theme like Home fragment does
         ThemeUtils.applyThemeToButton(downloadBtn, requireContext());
-        // Check if APK already exists and show appropriate button
-        String fileName = buildApkFileNameFromTitle(title);
-        File versionsDir = new File(requireContext().getExternalFilesDir(null), "versions");
-        File apkFile = new File(versionsDir, fileName);
-        
-        if (apkFile.exists()) {
-            downloadBtn.setText("Select");
-            downloadBtn.setOnClickListener(v -> selectApk(apkFile, title));
+
+        if (browserUrl != null) {
+            // No direct CDN link available — open browser so user can download manually
+            downloadBtn.setText("Get APK");
+            downloadBtn.setOnClickListener(v -> openUrl(browserUrl));
         } else {
-            downloadBtn.setText("Download");
-            downloadBtn.setOnClickListener(v -> startDownload(url, title));
+            // Check if APK already exists and show appropriate button
+            String fileName = buildApkFileNameFromTitle(title);
+            File versionsDir = new File(requireContext().getExternalFilesDir(null), "versions");
+            File apkFile = new File(versionsDir, fileName);
+
+            if (apkFile.exists()) {
+                downloadBtn.setText("Select");
+                downloadBtn.setOnClickListener(v -> selectApk(apkFile, title));
+            } else {
+                downloadBtn.setText("Download");
+                downloadBtn.setOnClickListener(v -> startDownload(url, title));
+            }
         }
 
         actions.addView(downloadBtn);
