@@ -34,6 +34,28 @@ public class VersionsRepository {
         }
     }
 
+    // Versions not yet on the CDN — pinned locally so they always appear at
+    // the top of the list. URL follows mcpedl.org naming convention; if it
+    // 404s the download will fail gracefully and the user sees an error toast.
+    private static final List<VersionEntry> PINNED_VERSIONS = java.util.Arrays.asList(
+        new VersionEntry("1.26.30.5 (Chaos Cubed)",
+            "https://mcpedl.org/uploads_files/16-06-2026/minecraft-1-26-30-5.apk",
+            false)
+    );
+
+    private List<VersionEntry> withPinned(List<VersionEntry> entries) {
+        List<VersionEntry> result = new ArrayList<>(PINNED_VERSIONS);
+        // Don't duplicate if CDN already lists the same version
+        for (VersionEntry e : entries) {
+            boolean dup = false;
+            for (VersionEntry p : PINNED_VERSIONS) {
+                if (e.title.equals(p.title)) { dup = true; break; }
+            }
+            if (!dup) result.add(e);
+        }
+        return result;
+    }
+
     public List<VersionEntry> getVersions(Context context) {
         Log.d(TAG, "Fetching versions from: " + REMOTE_URL);
         // Try refresh cache; if fails, fall back to cached file
@@ -45,7 +67,7 @@ public class VersionsRepository {
                 writeCache(cacheFile, lines);
                 List<VersionEntry> entries = parse(lines);
                 Log.d(TAG, "Parsed " + entries.size() + " version entries");
-                return entries;
+                return withPinned(entries);
             }
         } catch (Exception e) {
             Log.w(TAG, "Failed to fetch remote versions, using cache if available", e);
@@ -58,14 +80,14 @@ public class VersionsRepository {
                 List<String> cachedLines = readCache(cacheFile);
                 List<VersionEntry> entries = parse(cachedLines);
                 Log.d(TAG, "Parsed " + entries.size() + " cached version entries");
-                return entries;
+                return withPinned(entries);
             }
         } catch (Exception e) {
             Log.e(TAG, "Failed to read cached versions", e);
         }
 
-        Log.w(TAG, "No versions found, returning empty list");
-        return new ArrayList<>();
+        Log.w(TAG, "No versions found, returning pinned only");
+        return withPinned(new ArrayList<>());
     }
 
     public void clearCache(Context context) {
