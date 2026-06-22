@@ -26,21 +26,33 @@ public class VersionsRepository {
         public final String title;
         public final String url;
         public final boolean isBeta; // true: 4 dots, false: 3 dots
+        /**
+         * When non-null, clicking "Download" opens this URL in the browser
+         * instead of attempting a direct APK download. Used for versions whose
+         * direct CDN link is not yet available (e.g. 26.x on mcpedl).
+         */
+        public final String browserUrl;
 
         public VersionEntry(String title, String url, boolean isBeta) {
+            this(title, url, isBeta, null);
+        }
+
+        public VersionEntry(String title, String url, boolean isBeta, String browserUrl) {
             this.title = title;
             this.url = url;
             this.isBeta = isBeta;
+            this.browserUrl = browserUrl;
         }
     }
 
     // Versions not yet on the CDN — pinned locally so they always appear at
-    // the top of the list. URL follows mcpedl.org naming convention; if it
-    // 404s the download will fail gracefully and the user sees an error toast.
+    // the top of the list. When browserUrl is set the Download button opens
+    // the browser page instead of attempting a direct CDN download.
     private static final List<VersionEntry> PINNED_VERSIONS = java.util.Arrays.asList(
         new VersionEntry("1.26.30.5 (Chaos Cubed)",
             "https://mcpedl.org/uploads_files/16-06-2026/minecraft-1-26-30-5.apk",
-            false)
+            false,
+            "https://mcpedl.org/minecraft-pe/")
     );
 
     private List<VersionEntry> withPinned(List<VersionEntry> entries) {
@@ -263,4 +275,3 @@ public class VersionsRepository {
         return n;
     }
 }
-
