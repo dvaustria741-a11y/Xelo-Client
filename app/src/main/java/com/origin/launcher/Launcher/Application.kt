@@ -48,6 +48,8 @@ class LauncherApplication : Application() {
             setAnrRethrow(false)
         })
 
+        cleanupOldTombstones()
+
         try {
             System.loadLibrary("xelo_init")
             val modsDir = File(cacheDir, "mods")
@@ -56,6 +58,22 @@ class LauncherApplication : Application() {
             nativeSetupRuntime(modsDir.absolutePath)
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    /** Keep only the single most-recent xCrash tombstone, delete everything older. */
+    private fun cleanupOldTombstones() {
+        try {
+            val crashDir = File(Environment.getExternalStorageDirectory(), "games/xelo_client/crash_logs")
+            if (!crashDir.exists()) return
+            val files = crashDir.listFiles() ?: return
+            if (files.size <= 1) return
+            // Sort newest first by lastModified, keep index 0, delete the rest
+            files.sortedByDescending { it.lastModified() }
+                .drop(1)
+                .forEach { it.delete() }
+        } catch (e: Exception) {
+            Log.w("LauncherApplication", "Failed to clean up old tombstones: ${e.message}")
         }
     }
 
