@@ -33,6 +33,7 @@ class GamePackageManager private constructor(private val context: Context, priva
         "libfmod.so",
         "libMediaDecoders_Android.so",
         "libHttpClient.Android.so",
+        "libgxcore.so",        // new in 26.30 — extract from MC APK
         "libminecraftpe.so",
     )
 
@@ -40,7 +41,6 @@ class GamePackageManager private constructor(private val context: Context, priva
         "libPlayFabMultiplayer.so",
         "libmaesdk.so",
         "libpairipcore.so",
-        "libgxcore.so",         // new in 26.30
         "libmtbinloader2.so",
     )
 
