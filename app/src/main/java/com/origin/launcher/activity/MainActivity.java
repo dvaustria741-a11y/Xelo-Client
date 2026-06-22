@@ -81,6 +81,8 @@ public class MainActivity extends BaseThemedActivity {
     private SettingsFragment settingsFragment;
     private int currentFragmentIndex = 0;
     private LinearProgressIndicator globalProgress;
+    private TextView downloadMbText;
+    private long totalDownloadBytes = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -588,6 +590,10 @@ public class MainActivity extends BaseThemedActivity {
         if (globalProgress == null) {
             globalProgress = findViewById(R.id.global_download_progress);
         }
+        if (downloadMbText == null) {
+            downloadMbText = findViewById(R.id.download_mb_text);
+        }
+        totalDownloadBytes = max;
         if (globalProgress != null) {
             if (max > 0) {
                 globalProgress.setIndeterminate(false);
@@ -599,12 +605,24 @@ public class MainActivity extends BaseThemedActivity {
             globalProgress.setVisibility(View.VISIBLE);
             globalProgress.bringToFront();
         }
+        if (downloadMbText != null) {
+            String total = max > 0 ? String.format("%.2f MB", max / 1_048_576.0) : "?";
+            downloadMbText.setText("0.00 MB / " + total);
+            downloadMbText.setVisibility(View.VISIBLE);
+        }
     }
 
     public void updateGlobalProgress(int value) {
         if (globalProgress != null) {
             globalProgress.setIndeterminate(false);
             globalProgress.setProgressCompat(value, true);
+        }
+        if (downloadMbText != null) {
+            String downloaded = String.format("%.2f MB", value / 1_048_576.0);
+            String total = totalDownloadBytes > 0
+                ? String.format("%.2f MB", totalDownloadBytes / 1_048_576.0)
+                : "?";
+            downloadMbText.setText(downloaded + " / " + total);
         }
     }
 
@@ -613,6 +631,10 @@ public class MainActivity extends BaseThemedActivity {
             globalProgress.setVisibility(View.GONE);
             globalProgress.setIndeterminate(false);
         }
+        if (downloadMbText != null) {
+            downloadMbText.setVisibility(View.GONE);
+        }
+        totalDownloadBytes = 0;
     }
 
     @Override
