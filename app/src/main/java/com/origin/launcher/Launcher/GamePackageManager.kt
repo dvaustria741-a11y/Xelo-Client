@@ -37,9 +37,10 @@ class GamePackageManager private constructor(private val context: Context, priva
     )
 
     private val systemLoadedLibs = arrayOf(
-        "libpairipcore.so",
         "libPlayFabMultiplayer.so",
         "libmaesdk.so",
+        "libpairipcore.so",
+        "libgxcore.so",         // new in 26.30
         "libmtbinloader2.so",
     )
 
@@ -145,6 +146,36 @@ class GamePackageManager private constructor(private val context: Context, priva
         verifyLibraries(outputDir)
     }
 
+    // Android 13+ warns (and future versions will throw) when loading a
+    // writable native lib. Always make extracted files read-only before
+    // System.load() to avoid linker security delays that cause the ANR.
+    private fun ensureReadOnly(file: File) {
+        if (!file.isFile) return
+        file.setReadable(true, true)
+        file.setWritable(false)
+        file.setExecutable(true)
+    }
+
+    private fun copyStreamToReadOnlyFile(input: InputStream, output: File) {
+        val parent = output.parentFile
+        if (parent != null && !parent.exists()) parent.mkdirs()
+        if (output.exists()) output.delete()
+
+        val tmp = File(output.absolutePath + ".tmp")
+        if (tmp.exists()) tmp.delete()
+
+        FileOutputStream(tmp).use { out ->
+            input.copyTo(out)
+            out.fd.sync()
+        }
+
+        if (!tmp.renameTo(output)) {
+            tmp.delete()
+            throw IOException("Failed to rename ${tmp.name} -> ${output.name}")
+        }
+        ensureReadOnly(output)
+    }
+
     private fun copyFromNativeDir(sourceDir: String, destDir: File) {
         val source = File(sourceDir)
         if (!source.exists()) {
@@ -157,9 +188,9 @@ class GamePackageManager private constructor(private val context: Context, priva
             val dstFile = File(destDir, lib)
             if (srcFile.exists() && srcFile.length() > 0) {
                 try {
-                    srcFile.copyTo(dstFile, overwrite = true)
-                    dstFile.setReadable(true)
-                    dstFile.setExecutable(true)
+                    srcFile.inputStream().use { input ->
+                        copyStreamToReadOnlyFile(input, dstFile)
+                    }
                     logFileOperation("Copied", lib)
                 } catch (e: Exception) {
                     logFileOperation("Failed to copy", lib, e = e)
@@ -190,15 +221,12 @@ class GamePackageManager private constructor(private val context: Context, priva
                     }
                     val output = File(outputDir, lib)
                     if (output.exists() && output.length() > 0) {
+                        ensureReadOnly(output)
                         return@forEach
                     }
                     zip.getInputStream(entry).use { input ->
-                        FileOutputStream(output).use { out ->
-                            input.copyTo(out)
-                        }
+                        copyStreamToReadOnlyFile(input, output)
                     }
-                    output.setReadable(true)
-                    output.setExecutable(true)
                 }
             }
         } catch (e: Exception) {
@@ -290,6 +318,7 @@ class GamePackageManager private constructor(private val context: Context, priva
         } else {
             try {
                 if (libFile.exists() && libFile.length() > 0) {
+                    ensureReadOnly(libFile)
                     System.load(libFile.absolutePath)
                     Log.d(TAG, "Loaded $name from $nativeLibDir")
                     true
@@ -337,12 +366,17 @@ class GamePackageManager private constructor(private val context: Context, priva
 
         @Volatile
         private var instance: GamePackageManager? = null
+        private var lastVersionCode: String? = null
 
         @JvmStatic
         fun getInstance(context: Context, version: GameVersion? = null): GamePackageManager {
             return synchronized(this) {
-                instance = null // Reset instance to ensure fresh initialization
-                instance ?: GamePackageManager(context.applicationContext, version).also { instance = it }
+                val newVersionCode = version?.versionCode
+                if (instance == null || (newVersionCode != null && newVersionCode != lastVersionCode)) {
+                    instance = GamePackageManager(context.applicationContext, version)
+                    lastVersionCode = newVersionCode
+                }
+                instance!!
             }
         }
 
