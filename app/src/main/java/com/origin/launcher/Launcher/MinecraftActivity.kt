@@ -157,6 +157,14 @@ class MinecraftActivity : MainActivity() {
     }
 
     private fun startInbuiltModServices() {
+        // ThemeManager.getInstance() (no-arg) throws if never seeded with a
+        // Context. BaseOverlayButton.applyThemedIcon() calls the no-arg form,
+        // so we must seed it here before creating any overlays.
+        try {
+            com.origin.launcher.manager.ThemeManager.getInstance(applicationContext)
+        } catch (e: Exception) {
+            Log.w(TAG, "ThemeManager init failed: ${e.message}")
+        }
         overlayManager = InbuiltOverlayManager(this)
         overlayManager?.showEnabledOverlays()
     }
