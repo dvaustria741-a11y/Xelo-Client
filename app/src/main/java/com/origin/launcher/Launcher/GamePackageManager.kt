@@ -311,7 +311,7 @@ class GamePackageManager private constructor(private val context: Context, priva
                 System.loadLibrary(name.removePrefix("lib").removeSuffix(".so"))
                 Log.d(TAG, "Loaded $name as system library")
                 true
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Failed to load system library $name: ${e.message}")
                 false
             }
@@ -326,7 +326,7 @@ class GamePackageManager private constructor(private val context: Context, priva
                     Log.w(TAG, "Library $name not found in $nativeLibDir, skipping")
                     false
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Failed to load $name: ${e.message}")
                 false
             }
@@ -383,3 +383,4 @@ class GamePackageManager private constructor(private val context: Context, priva
         fun isInitialized() = instance != null
     }
 }
+
