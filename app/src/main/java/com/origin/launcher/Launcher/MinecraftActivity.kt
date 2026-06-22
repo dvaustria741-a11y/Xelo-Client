@@ -12,11 +12,68 @@ import com.origin.launcher.Launcher.inbuilt.overlay.InbuiltOverlayManager
 import com.origin.launcher.versions.GameVersion
 import com.origin.launcher.utils.FeatureSettings
 import java.io.File
+import java.io.FileWriter
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MinecraftActivity : MainActivity() {
 
     private lateinit var gameManager: GamePackageManager
     private var overlayManager: InbuiltOverlayManager? = null
+
+    // ------------------------------------------------------------------
+    // Helpers: write a crash/log snapshot to the app's external files dir
+    // so the user can grab it from Files without root or ADB.
+    // ------------------------------------------------------------------
+    private fun logDir(): File {
+        val dir = File("/storage/emulated/0/Android/data/com.origin.launcher.beta/files/xelo_logs")
+        dir.mkdirs()
+        return dir
+    }
+
+    private fun writeLog(tag: String, message: String, throwable: Throwable? = null) {
+        try {
+            val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+            val file = File(logDir(), "xelo_crash_${stamp}.txt")
+            FileWriter(file, true).use { fw ->
+                fw.write("=== Xelo Client Crash Log ===\n")
+                fw.write("Time   : $stamp\n")
+                fw.write("Tag    : $tag\n")
+                fw.write("Message: $message\n")
+                if (throwable != null) {
+                    val sw = StringWriter()
+                    throwable.printStackTrace(PrintWriter(sw))
+                    fw.write("Trace  :\n$sw\n")
+                }
+                fw.write("=============================\n")
+            }
+            Log.i(TAG, "Crash log written to ${file.absolutePath}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write crash log: ${e.message}")
+        }
+    }
+
+    private fun dumpLogcat() {
+        try {
+            val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+            val file = File(logDir(), "xelo_logcat_${stamp}.txt")
+            val proc = Runtime.getRuntime().exec(
+                arrayOf("logcat", "-d", "-v", "time", "*:W")
+            )
+            proc.inputStream.use { input ->
+                file.outputStream().use { out -> input.copyTo(out) }
+            }
+            proc.waitFor()
+            Log.i(TAG, "Logcat dump written to ${file.absolutePath}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to dump logcat: ${e.message}")
+        }
+    }
+
+    // ------------------------------------------------------------------
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
@@ -73,11 +130,29 @@ class MinecraftActivity : MainActivity() {
                 throw RuntimeException("Failed to load libminecraftpe.so")
             }
         } catch (e: Exception) {
+            writeLog("onCreate/loadLibrary", e.message ?: "unknown error", e)
+            dumpLogcat()
             Toast.makeText(this, "Failed to load game: ${e.message}", Toast.LENGTH_LONG).show()
             finish()
             return
         }
-        super.onCreate(savedInstanceState)
+
+        // Wrap super.onCreate so any engine-level crash is also captured
+        try {
+            super.onCreate(savedInstanceState)
+        } catch (e: Exception) {
+            writeLog("super.onCreate (engine crash)", e.message ?: "engine threw", e)
+            dumpLogcat()
+            finish()
+            return
+        } catch (e: Throwable) {
+            // UnsatisfiedLinkError, OutOfMemoryError, etc.
+            writeLog("super.onCreate (engine fatal)", e.message ?: "engine fatal", e)
+            dumpLogcat()
+            finish()
+            return
+        }
+
         MinecraftActivityState.onCreated(this)
     }
 
@@ -119,8 +194,8 @@ class MinecraftActivity : MainActivity() {
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-    if (event.action == MotionEvent.ACTION_BUTTON_PRESS || 
-            event.action == MotionEvent.ACTION_BUTTON_RELEASE) {
+        if (event.action == MotionEvent.ACTION_BUTTON_PRESS || 
+                event.action == MotionEvent.ACTION_BUTTON_RELEASE) {
             overlayManager?.handleMouseEvent(event)
         }
         if (event.action == MotionEvent.ACTION_SCROLL) {
@@ -142,6 +217,9 @@ class MinecraftActivity : MainActivity() {
     }
 
     override fun onDestroy() {
+        // Dump logcat before killing the process so the log survives.
+        dumpLogcat()
+
         MinecraftActivityState.onDestroyed()
         stopInbuiltModServices()
         super.onDestroy()
