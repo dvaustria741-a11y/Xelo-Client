@@ -52,7 +52,7 @@ public class VersionsRepository {
         new VersionEntry("1.26.30.5 (Chaos Cubed)",
             "https://mcpedl.org/uploads_files/16-06-2026/minecraft-1-26-30-5.apk",
             false,
-            "https://mcpedl.org/minecraft-pe/")
+            "https://mcpedl.org/minecraft-pe-26-30-apk/")
     );
 
     private List<VersionEntry> withPinned(List<VersionEntry> entries) {
